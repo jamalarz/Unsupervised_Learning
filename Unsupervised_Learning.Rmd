@@ -1,0 +1,223 @@
+---
+Title: "Non Supervised Learning Project"
+Subtitle: "Fisher Dynamic Programming"
+Author: Jamal Aourraz
+---
+---
+Importation Des Données Simulées "simu.txt"
+---
+```{r}
+sim_data <-read.table("http://allousame.free.fr/mlds/donnees/simu.txt",header = FALSE)
+sim_data <- as.matrix(sim_data)
+```
+---
+Importation Des Données Réelles "aiguillage.txt"
+---
+```{r}
+real_data <- read.table("http://allousame.free.fr/mlds/donnees/aiguillage.txt",header = F,sep=",")
+real_data_target = as.matrix(real_data[,553]) 
+real_data_features = as.matrix(real_data[,-553])
+```
+---
+Calcul des diamètres des classes: Fonction "diam"
+---
+```{r}
+diam <- function(data, n) {
+  #init matrix D
+  D <- matrix(data = 0, nrow = n, ncol = n)
+  for (a in 1:(n-1)){
+    j <- a+1 
+    for (b in j:n){
+      mu = colMeans(as.matrix(data[a:b,])) 
+      vect <- vector("numeric", length = b)
+      ind <- 1
+      for (i in a:b){
+        temp <- (data[i,] - mu)
+        tp <- sum(temp^2)
+        vect[ind] <- tp
+        ind <- ind+1
+      }
+      D[a,b] <- sum(vect) 
+    }
+  }
+  D
+}
+```
+---
+Implémentation de l'algorithme de programmation dynamique de Fisher: Fonction "clustficher"
+---
+```{r}
+clustficher <- function(data,nb_clusters)  {   
+
+  # Step 1: Initialize the necessary data structures
+  n <-  dim(data)[1]
+  D <- matrix(data = 0, nrow = n, ncol = n)
+  M1 <- matrix(data = 0, nrow = n, ncol = nb_clusters)
+  M2 <- matrix(data = 0, nrow = n, ncol = nb_clusters)
+  temp <- nb_clusters -1 
+  t <- array(data =0, dim = temp) 
+  clusters <- array(dim=n)
+  # Step 2: Calculation of diameters' matrix 
+  D <- diam(data,n)
+  # Step 2: Recursive calculation of optimal criteria
+  M1[,1] <- D[1,]
+  for (k in c(2:nb_clusters)) 
+    {
+    for (i in c(k:n)) 
+      {
+      v <- vector(mode="numeric",length= (i-k) +1 )
+      j <- 0 
+      for(t in c(k:i)) 
+        {
+        j <- j+1 
+        v[j] <- M1[t-1,k-1] + D[t,i]
+        }
+      M1[i,k] <- min(v)
+      M2[i,k] <- which.min(v) + k-1
+      } 
+    }
+  # Step 3: Recursive calculation of optimal instants of change 
+  k <- temp
+  m <- n
+  while (k >= 1) 
+    {
+    t[k] <- M2[m,(k+1)]
+    m <- t[k] -1
+    k <- k-1
+    }
+  # Step 4: Clusters Labels from instants of change 
+  tp <- t[1] -1
+  clusters[1:tp] <- 1
+  for (k in c(2:temp)) 
+    {
+    x <- t[k-1]
+    y <- t[k]-1
+    for (i in x:y)
+      {
+      clusters[i] <- k 
+      }
+    }
+  x <- t[temp]
+  clusters[x:n] <- nb_clusters
+  # Elbow Method Graph 
+  plot(M1[n,],type="b",lty=1:20,xlab = "Le nombre de clusters",ylab="Pourcentage de l'inertie", main = "Elbow Method")
+  return(list(val1=clusters, val2=t))
+}
+```
+---
+Application de l'algorithme de Fisher sur les données
+---
+```{r}
+sim_data_result <- clustficher(sim_data, 5) 
+real_feat_result <- clustficher(real_data_features, 4)
+```
+---
+Implémentation de l'algorithme de Kmeans: Fonction "clustKmeans"
+---
+```{r}
+clustKmeans <- function(data, nb_clusters)
+{
+  n <- dim(data)[1] 
+  kmns <- kmeans(data, nb_clusters, nstart = 20)
+  inertie.expl <- rep(0,times=20)
+  for (k in c(2:20))
+    {
+    clusters <- kmeans(data,centers=k,nstart=20)
+    inertie.expl[k] <- clusters$betweenss/clusters$totss
+    }
+  plot(1:20, inertie.expl,type="b",xlab="Nombre de clusters", ylab="Pourcentage d'inertie", main= "Elbow Method")
+  kmns 
+}
+```
+---
+Implémentation de l'algorithme de CAH-Ward : Fonction "clustCah"
+---
+```{r}
+clustCah <- function(data,nb_clusters)
+{ 
+  # Calculation of distance matrix
+  n <- dim(data)[1]
+  d <- dist(data, method = "euclidean")
+  H <- hclust(d, method="ward.D2")
+  # Display Dendogram
+  plot(as.hclust(H),hang=-1)
+  rect.hclust(as.hclust(H),k=nb_clusters,border="red")
+  groupes.cah <- cutree(H,k=nb_clusters)
+  F <- cbind(c(1:n),data)
+  plot(F, col=as.numeric(groupes.cah),xlab = "Index",ylab = "Les Données",main = "Algorithme de CAH-Ward") 
+  plot(cbind(c(1:n),groupes.cah), col=as.numeric(groupes.cah),xlab = "index",ylab = "les classes",main = "Algorithme de la CAH-Ward") 
+  #La méthode du coude
+  inertie <- sort(H$height, decreasing = TRUE)
+  plot(inertie[1:20], type= "b", xlab= "Nombre de classes", ylab ="Pourcentage d'Inertie", main= "Elbow Method")
+  groupes.cah
+}
+```
+---
+Graphe des résultats de la programmation dynamique de Fisher sur les données simulées
+---
+```{r}
+plot(cbind(c(1:210), sim_data), col=as.numeric(sim_data_result$val1), xlab="Index", ylab= "Les données", main= "Programmation Dynamique de Fisher - Données Simulées")
+abline(v=sim_data_result$val2, col="blue")
+```
+---
+Graphe des résultats de la programmation dynamique de Fisher sur les données réelles
+---
+```{r}
+plot(cbind(c(1:140), real_feat_result$val1), col=as.numeric(real_feat_result$val1), xlab="Index", ylab="Les classes", main="Programmation Dynamique de Fisher - Données Réelles")
+abline(v=real_feat_result$val2, col="blue")
+```
+---
+Comparaison des données réelles avec les classes résultantes
+---
+```{r}
+plot(cbind(c(1:140), real_data_target), col=as.numeric(real_data_target), xlab ="Index", ylab= "les classes", main= "Les données réelles selon les vraies classes") 
+abline(v=real_feat_result$val2, col="blue")
+```
+---
+Table de Confusion
+---
+```{r}
+tb <- table(real_feat_result$val1, real_data_target)
+print(tb)
+prop.table(tb)
+```
+---
+Application de Kmeans sur les données simulées
+---
+```{r}
+F <- cbind(c(1:210),sim_data)
+kmns_sim <- clustKmeans(sim_data,4)
+kmns_sim_time <- clustKmeans(F,4)
+#Sans tenir compte du temps
+plot(F, col=as.numeric(kmns_sim$cluster),xlab = "Index", ylab = "Données",main = "Kmeans sur données simulées sans tenir compte du temps")
+#En tenant compte du temps
+plot(F, col= as.numeric(kmns_sim_time$cluster), xlab= "Index", ylab= "Les données", main= "Kmeans sur données simulées en tenant compte du temps") 
+
+```
+---
+Application de CAH-Ward sur les données simulées
+---
+```{r}
+sim_cah <- clustCah(sim_data,4)
+sim_cah_time <- clustCah(F,4)
+#Sans tenir compte du temps
+plot(F, col=as.numeric(sim_cah),xlab = "Index",ylab = "Données",main = "CAH-Ward sur données simulées sans tenir compte du temps")
+#En tenant compte du temps
+plot(F, col=as.numeric(sim_cah_time),xlab = "Index",ylab = "Données",main = "CAH-Ward sur données simulées en tenant compte du temps")
+```
+---
+Application de Kmeans sur les données réelles
+---
+```{r}
+kmns_real_data <- clustKmeans(real_data_features,4)
+plot(cbind(c(1:140), kmns_real_data$cluster), col=as.numeric(kmns_real_data$cluster), xlab= "Index", ylab= "Les classes ", main= "Kmeans sur données réelles")
+```
+
+---
+Application de CAH-Ward sur les données réelles
+---
+```{r}
+cah_real_data <- clustCah(real_data_features,4)
+plot(cbind(c(1:140),cah_real_data), col=as.numeric(cah_real_data), xlab= "Index",ylab= "Les classes ",main= "CAH-Ward sur données réelles")
+```
+
